@@ -49,6 +49,19 @@ def _owl_center_to_corners_format_torch(bboxes_center):
     return bbox_corners
 
 
+def _owl_resolve_model_name(name: str, lookup: dict):
+    """Lookup by exact HF id first, then match against local path components."""
+    if name in lookup:
+        return lookup[name]
+    for key, value in lookup.items():
+        if key.split("/")[-1] in name:
+            return value
+    raise KeyError(
+        f"Cannot determine OWL-ViT config for {name!r}. "
+        f"Known models: {', '.join(lookup)}"
+    )
+
+
 def _owl_get_image_size(hf_name: str):
 
     image_sizes = {
@@ -57,7 +70,7 @@ def _owl_get_image_size(hf_name: str):
         "google/owlvit-large-patch14": 840,
     }
 
-    return image_sizes[hf_name]
+    return _owl_resolve_model_name(hf_name, image_sizes)
 
 
 def _owl_get_patch_size(hf_name: str):
@@ -68,7 +81,7 @@ def _owl_get_patch_size(hf_name: str):
         "google/owlvit-large-patch14": 14,
     }
 
-    return patch_sizes[hf_name]
+    return _owl_resolve_model_name(hf_name, patch_sizes)
 
 
 # This function is modified from https://github.com/huggingface/transformers/blob/e8fdd7875def7be59e2c9b823705fbf003163ea0/src/transformers/models/owlvit/modeling_owlvit.py#L1333
@@ -374,7 +387,8 @@ class OwlPredictor(torch.nn.Module):
             input_names=self.get_image_encoder_input_names(), 
             output_names=self.get_image_encoder_output_names(),
             dynamic_axes=dynamic_axes,
-            opset_version=onnx_opset
+            opset_version=onnx_opset,
+            dynamo=False,
         )
     
     @staticmethod
