@@ -412,6 +412,7 @@ class OwlPredictor(torch.nn.Module):
                 super().__init__()
                 self.base_module = base_module
                 self.max_batch_size = max_batch_size
+                self._stream = torch.cuda.Stream()
 
             @torch.no_grad()
             def forward(self, image):
@@ -420,14 +421,15 @@ class OwlPredictor(torch.nn.Module):
 
                 results = []
 
-                for start_index in range(0, b, self.max_batch_size):
-                    end_index = min(b, start_index + self.max_batch_size)
-                    image_slice = image[start_index:end_index]
-                    # with torch_timeit_sync("run_engine"):
-                    output = self.base_module(image_slice)
-                    results.append(
-                        output
-                    )
+                with torch.cuda.stream(self._stream):
+                    for start_index in range(0, b, self.max_batch_size):
+                        end_index = min(b, start_index + self.max_batch_size)
+                        image_slice = image[start_index:end_index]
+                        output = self.base_module(image_slice)
+                        results.append(
+                            output
+                        )
+                self._stream.synchronize()
 
                 return OwlEncodeImageOutput(
                     image_embeds=torch.cat([r[0] for r in results], dim=0),
